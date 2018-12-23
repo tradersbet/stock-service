@@ -6,6 +6,7 @@ const Websocket = require('websocket').server;
 const redis = require('redis');
 const client = redis.createClient(); 
 
+//Binance API
 const binance = require('node-binance-api')().options({
   APIKEY: "yTGrczsnJIxGnlRTkmHW2dMAAcPoHNUtoqC2SgT5yWKnv2UFjQ7YaM4zP5zO1z1Q",
   APISECRET: "CcpnnqTMCu4S5pAEFcHsEMcVwEPuKyoqqo4ySbTm2LzSHRMTysDbtZ8FFIse1t7Z",
@@ -17,8 +18,8 @@ const server = http.createServer((req, res) => {
   res.end(index);
 });
 
-server.listen(8000, () => {
-  console.log('Listen port 8000');
+server.listen(8080, () => {
+  console.log('Listen port 8080');
 });
 
 const ws = new Websocket({
@@ -41,8 +42,12 @@ ws.on('request', req => {
     const data = message[dataName];
     console.log('Received: ' + data);
     connections.forEach(client => {
-      if (connection !== client) {
-        client.send(data);
+      //When new connection to socket 
+      if (connection == client) {
+        //send information about previous day
+        binance.prevDay("ETHBTC", (error, prevDay, symbol) => {
+        client.send( prevDay);
+        });
       }
     });
   });
@@ -52,9 +57,10 @@ ws.on('request', req => {
   });
 });
 
-
-binance.websockets.miniTicker(markets => {
-  let prices = JSON.stringify(markets);
+binance.websockets.candlesticks(['ETHBTC'], "1m", (candlesticks) => {
+  let { e:eventType, E:eventTime, s:symbol, k:ticks } = candlesticks;
+  let { o:open, h:high, l:low, c:close, v:volume, n:trades, i:interval, x:isFinal, q:quoteVolume, V:buyVolume, Q:quoteBuyVolume } = ticks;
+  let prices = JSON.stringify(ticks);
   client.set('prices', prices, redis.print);
   connections.forEach(client => {
         client.send(prices);

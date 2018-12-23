@@ -1,14 +1,17 @@
-'use strict';
-
 const http = require('http');
 const Websocket = require('websocket').server;
 
 const redis = require('redis');
 const client = redis.createClient(); 
 
+const config = require('./config');
+
+//Binance API
+const { APIKEY, APISECRET } = config.Binance;
+const { CURRENCY } = config.Currency;
 const binance = require('node-binance-api')().options({
-  APIKEY: "yTGrczsnJIxGnlRTkmHW2dMAAcPoHNUtoqC2SgT5yWKnv2UFjQ7YaM4zP5zO1z1Q",
-  APISECRET: "CcpnnqTMCu4S5pAEFcHsEMcVwEPuKyoqqo4ySbTm2LzSHRMTysDbtZ8FFIse1t7Z",
+  APIKEY, 
+  APISECRET, 
   useServerTime: true, 
 });
 
@@ -17,8 +20,8 @@ const server = http.createServer((req, res) => {
   res.end(index);
 });
 
-server.listen(8000, () => {
-  console.log('Listen port 8000');
+server.listen(8080, () => {
+  console.log('Listen port 8080');
 });
 
 const ws = new Websocket({
@@ -41,8 +44,12 @@ ws.on('request', req => {
     const data = message[dataName];
     console.log('Received: ' + data);
     connections.forEach(client => {
-      if (connection !== client) {
-        client.send(data);
+      //When new connection to socket 
+      if (connection == client) {
+        //send information about previous day
+        binance.prevDay(CURRENCY, (error, prevDay, symbol) => {
+        client.send( prevDay);
+        });
       }
     });
   });
@@ -52,9 +59,27 @@ ws.on('request', req => {
   });
 });
 
-
-binance.websockets.miniTicker(markets => {
-  let prices = JSON.stringify(markets);
+binance.websockets.candlesticks([CURRENCY], '1m', (candlesticks) => {
+  const { 
+    e:eventType, 
+    E:eventTime, 
+    s:symbol, 
+    k:ticks, 
+  } = candlesticks;
+  const price = { 
+    open: ticks.o,
+    high: ticks.h,
+    low: ticks.l, 
+    close: ticks.c, 
+    volume: ticks.v, 
+    trades: ticks.n, 
+    interval: ticks.i, 
+    isFinal: ticks.x, 
+    quoteVolume: ticks.q, 
+    buyVolume: ticks.V, 
+    quoteBuyVolume: ticks.Q, 
+  };
+  const prices = JSON.stringify(price);
   client.set('prices', prices, redis.print);
   connections.forEach(client => {
         client.send(prices);

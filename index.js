@@ -1,15 +1,17 @@
-'use strict';
-
 const http = require('http');
 const Websocket = require('websocket').server;
 
 const redis = require('redis');
 const client = redis.createClient(); 
 
+const config = require('./config');
+
 //Binance API
+const { APIKEY, APISECRET } = config.Binance;
+const { CURRENCY } = config.Currency;
 const binance = require('node-binance-api')().options({
-  APIKEY: "yTGrczsnJIxGnlRTkmHW2dMAAcPoHNUtoqC2SgT5yWKnv2UFjQ7YaM4zP5zO1z1Q",
-  APISECRET: "CcpnnqTMCu4S5pAEFcHsEMcVwEPuKyoqqo4ySbTm2LzSHRMTysDbtZ8FFIse1t7Z",
+  APIKEY, 
+  APISECRET, 
   useServerTime: true, 
 });
 
@@ -45,7 +47,7 @@ ws.on('request', req => {
       //When new connection to socket 
       if (connection == client) {
         //send information about previous day
-        binance.prevDay("ETHBTC", (error, prevDay, symbol) => {
+        binance.prevDay(CURRENCY, (error, prevDay, symbol) => {
         client.send( prevDay);
         });
       }
@@ -57,10 +59,27 @@ ws.on('request', req => {
   });
 });
 
-binance.websockets.candlesticks(['ETHBTC'], "1m", (candlesticks) => {
-  let { e:eventType, E:eventTime, s:symbol, k:ticks } = candlesticks;
-  let { o:open, h:high, l:low, c:close, v:volume, n:trades, i:interval, x:isFinal, q:quoteVolume, V:buyVolume, Q:quoteBuyVolume } = ticks;
-  let prices = JSON.stringify(ticks);
+binance.websockets.candlesticks([CURRENCY], '1m', (candlesticks) => {
+  const { 
+    e:eventType, 
+    E:eventTime, 
+    s:symbol, 
+    k:ticks, 
+  } = candlesticks;
+  const price = { 
+    open: ticks.o,
+    high: ticks.h,
+    low: ticks.l, 
+    close: ticks.c, 
+    volume: ticks.v, 
+    trades: ticks.n, 
+    interval: ticks.i, 
+    isFinal: ticks.x, 
+    quoteVolume: ticks.q, 
+    buyVolume: ticks.V, 
+    quoteBuyVolume: ticks.Q, 
+  };
+  const prices = JSON.stringify(price);
   client.set('prices', prices, redis.print);
   connections.forEach(client => {
         client.send(prices);
